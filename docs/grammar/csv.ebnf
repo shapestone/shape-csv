@@ -1,0 +1,180 @@
+// CSV Grammar Specification (RFC 4180)
+// This grammar defines the CSV (Comma-Separated Values) data format.
+//
+// Implementation Guide:
+// - Use LL(1) recursive descent parsing (see Shape ADR 0004)
+// - Each production rule becomes a parse function
+// - Return appropriate ast.SchemaNode types (LiteralNode for CSV data)
+// - Provide context-aware error messages
+// - CSV is a data format with optional headers
+//
+// Key characteristics of RFC 4180:
+// - Records separated by CRLF (or just LF in practice)
+// - Fields separated by commas
+// - Fields may be quoted with double quotes
+// - Quoted fields can contain commas, quotes (escaped as ""), and newlines
+// - Optional header row
+
+// Top-level CSV file
+// Parser function: Parse() -> ast.SchemaNode
+// CSV file consists of optional header row and zero or more records
+// Example valid: "name,age\nAlice,30\nBob,25"
+// Example valid: "Alice,30\nBob,25" (no header)
+// Example valid: "" (empty file)
+// Returns: ast.NewObjectNode representing CSV structure
+File = [ Header ] { Record } ;
+
+// Header row (first record, treated specially)
+// Parser function: parseHeader() -> []string
+// Defines column names for the CSV file
+// Example valid: "name,age,city"
+// Example valid: "\"First Name\",\"Last Name\",Email"
+// Same structure as a Record but interpreted as column names
+Header = Record ;
+
+// Record: one row of CSV data
+// Parser function: parseRecord() -> ast.SchemaNode
+// A record is one or more fields separated by commas, ending with line terminator
+// Example valid: "Alice,30,true"
+// Example valid: "\"Smith, John\",\"123 Main St\",Seattle"
+// Example valid: "simple,\"quoted field\",another"
+// Example invalid: "field1,field2" (if followed by more data without line terminator)
+// Returns: ast.NewArrayNode or ast.NewObjectNode (if header present)
+Record = Field { "," Field } LineTerminator ;
+
+// Field: single data value
+// Parser function: parseField() -> *ast.LiteralNode
+// Can be quoted or unquoted
+// Unquoted fields cannot contain commas, quotes, or newlines
+// Quoted fields can contain any character; quotes escaped as ""
+// Example valid: simple
+// Example valid: "quoted field"
+// Example valid: "field with, comma"
+// Example valid: "field with ""quotes"""
+// Example valid: "field with
+// newline"
+// Example invalid: field with, comma (must be quoted)
+// Example invalid: field with "quotes" (must be properly quoted/escaped)
+// Returns: ast.NewLiteralNode(string_value, position)
+Field = QuotedField | UnquotedField ;
+
+// Quoted field: enclosed in double quotes
+// Parser function: parseQuotedField() -> *ast.LiteralNode
+// Can contain any character including commas, newlines, and quotes
+// Internal quotes must be escaped as ""
+// Example valid: "simple"
+// Example valid: "with, comma"
+// Example valid: "with ""quotes"""
+// Example valid: "line1
+// line2"
+// Example invalid: "unterminated
+// Example invalid: "bad"quotes" (quotes not properly escaped)
+QuotedField = '"' { QuotedChar | EscapedQuote } '"' ;
+
+// Character in quoted field
+// Any character except quote, or must be escaped
+QuotedChar = [^"] ;
+
+// Escaped quote in quoted field
+// Two consecutive quotes represent one quote character
+// Example: "" -> "
+EscapedQuote = '""' ;
+
+// Unquoted field: any text except special characters
+// Parser function: parseUnquotedField() -> *ast.LiteralNode
+// Cannot contain comma, quote, CR, or LF
+// Whitespace is preserved (RFC 4180 does not trim)
+// Example valid: simple
+// Example valid: 123
+// Example valid: true
+// Example valid: hello world (with space)
+// Example invalid: hello,world (contains comma)
+// Example invalid: hello"world (contains quote)
+// Example invalid: hello
+// world (contains newline)
+UnquotedField = { UnquotedChar } ;
+
+// Character in unquoted field
+// Any character except comma, quote, CR, LF
+UnquotedChar = [^,"\r\n] ;
+
+// Line terminator
+// Parser function: parseLineTerminator() -> void
+// RFC 4180 specifies CRLF but LF is commonly accepted
+// Example valid: CRLF (\r\n)
+// Example valid: LF (\n)
+// Note: Last record may not have line terminator (EOF)
+LineTerminator = CRLF | LF | EOF ;
+
+// Carriage return + line feed
+CRLF = "\r\n" ;
+
+// Line feed only
+LF = "\n" ;
+
+// End of file
+EOF = <end of input> ;
+
+// ================================================================================
+// Implementation Notes
+// ================================================================================
+//
+// Type Inference:
+// - CSV data is inherently untyped (all fields are strings)
+// - Parser may optionally infer types: numbers, booleans, null
+// - Example: "123" -> int64(123)
+// - Example: "3.14" -> float64(3.14)
+// - Example: "true" -> bool(true)
+// - Example: "" -> empty string or null
+// - Type inference should be configurable
+//
+// Header Handling:
+// - If header present: return ObjectNode with named properties
+// - If no header: return ArrayNode with positional elements
+// - Header detection should be configurable or automatic
+//
+// Error Recovery:
+// - Malformed records: skip to next line terminator
+// - Inconsistent field counts: pad with empty fields or truncate
+// - Unescaped quotes in quoted fields: attempt recovery or error
+//
+// Valid Examples:
+//
+// Example 1: Simple CSV with header
+//   name,age,active
+//   Alice,30,true
+//   Bob,25,false
+//
+// Example 2: Quoted fields with special characters
+//   "Last Name","First Name","Address"
+//   "Smith","John","123 Main St, Apt 4"
+//   "Doe","Jane","456 Elm St"
+//
+// Example 3: Escaped quotes
+//   title,quote
+//   "Famous Quote","She said ""Hello!"""
+//
+// Example 4: Fields with newlines
+//   id,description
+//   1,"Line 1
+//   Line 2"
+//   2,"Single line"
+//
+// Example 5: No header
+//   Alice,30,true
+//   Bob,25,false
+//
+// Invalid Examples:
+//
+// Example 1: Unescaped quote in quoted field
+//   "bad"quote"
+//   Should be: "bad""quote"
+//
+// Example 2: Unquoted field with comma
+//   Smith, John
+//   Should be: "Smith, John"
+//
+// Example 3: Inconsistent field counts (warning, may be accepted)
+//   name,age
+//   Alice,30
+//   Bob,25,extra
