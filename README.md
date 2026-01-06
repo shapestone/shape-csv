@@ -10,6 +10,10 @@
 [![CodeQL](https://github.com/shapestone/shape-csv/actions/workflows/codeql.yml/badge.svg)](https://github.com/shapestone/shape-csv/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/shapestone/shape-csv/badge)](https://securityscorecards.dev/viewer/?uri=github.com/shapestone/shape-csv)
 
+Repository: github.com/shapestone/shape-csv
+
+A CSV parser for the [Shape Parser™](https://github.com/shapestone/shape) ecosystem.
+
 A high-performance CSV parser for Go that generates Shape AST representations. Part of the Shape ecosystem for unified data format handling.
 
 ## Features
