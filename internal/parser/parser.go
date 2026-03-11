@@ -345,7 +345,8 @@ func (p *Parser) parseQuotedField() (*ast.LiteralNode, error) {
 
 		kind := token.Kind()
 
-		if kind == tokenizer.TokenDQuote {
+		switch kind {
+		case tokenizer.TokenDQuote:
 			// Found a quote - could be closing quote or escaped quote
 			p.advance() // consume the quote
 
@@ -359,15 +360,15 @@ func (p *Parser) parseQuotedField() (*ast.LiteralNode, error) {
 				// Closing quote - we're done
 				return ast.NewLiteralNode(value.String(), startPos), nil
 			}
-		} else if kind == tokenizer.TokenField {
+		case tokenizer.TokenField:
 			// Field content
 			value.WriteString(token.ValueString())
 			p.advance()
-		} else if kind == tokenizer.TokenComma {
+		case tokenizer.TokenComma:
 			// Delimiter inside quoted field - treat as literal
 			value.WriteRune(p.opts.Comma)
 			p.advance()
-		} else if kind == tokenizer.TokenNewline {
+		case tokenizer.TokenNewline:
 			// Newline inside quoted field - treat as literal
 			// Detect CRLF vs LF by checking the token value
 			tokenValue := token.ValueString()
@@ -377,7 +378,7 @@ func (p *Parser) parseQuotedField() (*ast.LiteralNode, error) {
 				value.WriteByte('\n')
 			}
 			p.advance()
-		} else {
+		default:
 			return nil, fmt.Errorf("unexpected token %s in quoted field at %s", kind, p.positionStr())
 		}
 	}

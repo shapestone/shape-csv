@@ -179,10 +179,11 @@ func TestScanner_ReuseRecord(t *testing.T) {
 	for scanner.Scan() {
 		record := scanner.Record()
 
-		if recordNum == 0 {
+		switch recordNum {
+		case 0:
 			// Store pointer to first record
 			firstRecordPtr = &record
-		} else if recordNum == 1 {
+		case 1:
 			// Verify it's the same underlying slice
 			secondRecordPtr := &record
 			if firstRecordPtr != secondRecordPtr {

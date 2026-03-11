@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== shape-csv: Similar API to encoding/csv ===\n")
+	fmt.Println("=== shape-csv: Similar API to encoding/csv ===")
 
 	// CSV with special characters that need quoting
 	csvData := `product,description,price

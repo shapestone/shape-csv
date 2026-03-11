@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -475,7 +476,7 @@ func BenchmarkShapeCSV_Unmarshal_QuotedFields(b *testing.B) {
 	var sb strings.Builder
 	sb.WriteString("name,description,notes\n")
 	for i := 0; i < 100; i++ {
-		sb.WriteString(fmt.Sprintf("\"User %d\",\"Description with, comma and \"\"quotes\"\"\",\"Multi\nline\nnotes\"\n", i))
+		fmt.Fprintf(&sb, "\"User %d\",\"Description with, comma and \"\"quotes\"\"\",\"Multi\nline\nnotes\"\n", i)
 	}
 	input := []byte(sb.String())
 
@@ -497,7 +498,7 @@ func BenchmarkEncodingCSV_QuotedFields(b *testing.B) {
 	var sb strings.Builder
 	sb.WriteString("name,description,notes\n")
 	for i := 0; i < 100; i++ {
-		sb.WriteString(fmt.Sprintf("\"User %d\",\"Description with, comma and \"\"quotes\"\"\",\"Multi\nline\nnotes\"\n", i))
+		fmt.Fprintf(&sb, "\"User %d\",\"Description with, comma and \"\"quotes\"\"\",\"Multi\nline\nnotes\"\n", i)
 	}
 	input := sb.String()
 
@@ -511,5 +512,40 @@ func BenchmarkEncodingCSV_QuotedFields(b *testing.B) {
 			b.Fatal(err)
 		}
 		_ = records
+	}
+}
+
+// ================================
+// Small Marshal Benchmark (compiled encoder)
+// ================================
+
+// BenchmarkShapeCSV_Marshal_Small benchmarks marshaling a small struct slice.
+func BenchmarkShapeCSV_Marshal_Small(b *testing.B) {
+	type SmallRecord struct {
+		ID     int     `csv:"id"`
+		Name   string  `csv:"name"`
+		Email  string  `csv:"email"`
+		Score  float64 `csv:"score"`
+		Active bool    `csv:"active"`
+	}
+
+	records := make([]SmallRecord, 10)
+	for i := range records {
+		records[i] = SmallRecord{
+			ID:     i + 1,
+			Name:   "User " + strconv.Itoa(i),
+			Email:  "user" + strconv.Itoa(i) + "@example.com",
+			Score:  float64(i) * 10.5,
+			Active: i%2 == 0,
+		}
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := shapecsv.Marshal(records)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
