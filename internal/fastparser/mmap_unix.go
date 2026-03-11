@@ -38,14 +38,14 @@ func MmapFile(filename string) ([]byte, func(), error) {
 	// Get file size
 	stat, err := f.Stat()
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, nil, fmt.Errorf("failed to stat file: %w", err)
 	}
 
 	size := stat.Size()
 	if size == 0 {
 		// Empty file - return empty slice and cleanup that just closes the file
-		return []byte{}, func() { f.Close() }, nil
+		return []byte{}, func() { _ = f.Close() }, nil
 	}
 
 	// Memory-map the file
@@ -57,14 +57,14 @@ func MmapFile(filename string) ([]byte, func(), error) {
 		syscall.MAP_SHARED,
 	)
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, nil, fmt.Errorf("failed to mmap file: %w", err)
 	}
 
 	// Create cleanup function that unmaps and closes
 	cleanup := func() {
 		_ = syscall.Munmap(data)
-		f.Close()
+		_ = f.Close()
 	}
 
 	return data, cleanup, nil
