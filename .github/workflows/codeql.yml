@@ -25,12 +25,12 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         path: shape-csv
 
     - name: Checkout shape-core
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: shapestone/shape-core
         path: shape-core
