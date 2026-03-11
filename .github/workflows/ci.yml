@@ -10,18 +10,18 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           path: shape-csv
 
       - name: Checkout shape-core
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           repository: shapestone/shape-core
           path: shape-core
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.23'
           check-latest: true
@@ -73,18 +73,18 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           path: shape-csv
 
       - name: Checkout shape-core
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           repository: shapestone/shape-core
           path: shape-core
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.23'
           check-latest: true
