@@ -1,36 +1,9 @@
 package csv
 
 import (
-	"bytes"
 	"fmt"
 	"reflect"
-	"sort"
-	"strconv"
-	"strings"
-	"sync"
 )
-
-// Buffer pool for marshaling to reduce allocations
-var bufferPool = sync.Pool{
-	New: func() interface{} {
-		return new(bytes.Buffer)
-	},
-}
-
-// getBuffer retrieves a buffer from the pool.
-func getBuffer() *bytes.Buffer {
-	buf := bufferPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	return buf
-}
-
-// putBuffer returns a buffer to the pool.
-func putBuffer(buf *bytes.Buffer) {
-	// Only return reasonably sized buffers to the pool
-	if buf.Cap() < 64*1024 { // 64KB limit
-		bufferPool.Put(buf)
-	}
-}
 
 // Marshaler is the interface implemented by types that can marshal themselves into CSV.
 type Marshaler interface {
@@ -95,14 +68,13 @@ func Marshal(v interface{}) ([]byte, error) {
 		return nil, fmt.Errorf("csv: Marshal expects slice, got %s", rv.Type())
 	}
 
-	// Get slice element type (should be struct)
 	if rv.Len() == 0 {
-		// Empty slice produces empty output
 		return []byte{}, nil
 	}
 
 	elemType := rv.Type().Elem()
-	if elemType.Kind() == reflect.Ptr {
+	isPtr := elemType.Kind() == reflect.Ptr
+	if isPtr {
 		elemType = elemType.Elem()
 	}
 
@@ -110,160 +82,45 @@ func Marshal(v interface{}) ([]byte, error) {
 		return nil, fmt.Errorf("csv: Marshal expects slice of structs, got slice of %s", elemType)
 	}
 
-	// Build field information
-	type fieldEntry struct {
-		name      string
-		index     int
-		omitEmpty bool
-	}
+	// Get cached compiled encoder for this struct type
+	enc := getCSVStructEncoder(elemType)
 
-	var fields []fieldEntry
-	for i := 0; i < elemType.NumField(); i++ {
-		field := elemType.Field(i)
+	// Estimate capacity: header + avg row size * num rows
+	estimatedSize := len(enc.headerRow) + rv.Len()*len(enc.headerRow)
+	buf := make([]byte, 0, estimatedSize)
 
-		// Skip unexported fields
-		if field.PkgPath != "" {
-			continue
-		}
-
-		info := getFieldInfo(field)
-
-		// Skip fields with "-" tag
-		if info.skip {
-			continue
-		}
-
-		fields = append(fields, fieldEntry{
-			name:      info.name,
-			index:     i,
-			omitEmpty: info.omitEmpty,
-		})
-	}
-
-	// Sort fields by name for deterministic output
-	sort.Slice(fields, func(i, j int) bool {
-		return fields[i].name < fields[j].name
-	})
-
-	buf := getBuffer()
-	defer putBuffer(buf)
-
-	// Write header row
-	for i, field := range fields {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		writeField(buf, field.name)
-	}
-	buf.WriteByte('\n')
+	// Write pre-computed header
+	buf = append(buf, enc.headerRow...)
 
 	// Write data rows
 	for rowIdx := 0; rowIdx < rv.Len(); rowIdx++ {
 		row := rv.Index(rowIdx)
 
 		// Handle pointer to struct
-		if row.Kind() == reflect.Ptr {
+		if isPtr {
 			if row.IsNil() {
-				// Skip nil pointers
 				continue
 			}
 			row = row.Elem()
 		}
 
-		// Write each field
-		for i, field := range fields {
+		for i, field := range enc.fields {
 			if i > 0 {
-				buf.WriteByte(',')
+				buf = append(buf, ',')
 			}
 
-			fieldVal := row.Field(field.index)
+			fv := row.Field(field.index)
 
-			// Handle omitempty
-			if field.omitEmpty && isEmptyValue(fieldVal) {
-				// Write empty field (maintains column structure)
+			// Handle omitempty: field column stays but value is empty
+			if field.omitEmpty && field.emptyFn(fv) {
 				continue
 			}
 
-			// Convert field value to string and write
-			if err := marshalFieldValue(fieldVal, buf); err != nil {
-				return nil, fmt.Errorf("csv: error marshaling field %s: %w", field.name, err)
-			}
+			buf = field.writer(buf, fv)
 		}
-		buf.WriteByte('\n')
+		buf = append(buf, '\n')
 	}
 
-	// Make a copy of the bytes since we're returning the buffer to the pool
-	result := make([]byte, buf.Len())
-	copy(result, buf.Bytes())
-	return result, nil
+	return buf, nil
 }
 
-// marshalFieldValue marshals a single field value to the buffer
-func marshalFieldValue(rv reflect.Value, buf *bytes.Buffer) error {
-	// Handle invalid values
-	if !rv.IsValid() {
-		return nil // Empty field
-	}
-
-	// Handle pointers
-	if rv.Kind() == reflect.Ptr {
-		if rv.IsNil() {
-			return nil // Empty field for nil pointer
-		}
-		return marshalFieldValue(rv.Elem(), buf)
-	}
-
-	// Handle interface
-	if rv.Kind() == reflect.Interface {
-		if rv.IsNil() {
-			return nil // Empty field
-		}
-		return marshalFieldValue(rv.Elem(), buf)
-	}
-
-	switch rv.Kind() {
-	case reflect.String:
-		writeField(buf, rv.String())
-		return nil
-
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		writeField(buf, strconv.FormatInt(rv.Int(), 10))
-		return nil
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		writeField(buf, strconv.FormatUint(rv.Uint(), 10))
-		return nil
-
-	case reflect.Float32, reflect.Float64:
-		writeField(buf, strconv.FormatFloat(rv.Float(), 'g', -1, 64))
-		return nil
-
-	case reflect.Bool:
-		writeField(buf, strconv.FormatBool(rv.Bool()))
-		return nil
-
-	default:
-		return fmt.Errorf("unsupported type %s", rv.Type())
-	}
-}
-
-// writeField writes a CSV field to the buffer with proper escaping
-func writeField(buf *bytes.Buffer, value string) {
-	// Check if field needs quoting
-	needsQuoting := strings.ContainsAny(value, ",\"\n\r")
-
-	if needsQuoting {
-		buf.WriteByte('"')
-		// Escape quotes by doubling them
-		for _, ch := range value {
-			if ch == '"' {
-				buf.WriteString(`""`)
-			} else {
-				buf.WriteRune(ch)
-			}
-		}
-		buf.WriteByte('"')
-	} else {
-		buf.WriteString(value)
-	}
-}
