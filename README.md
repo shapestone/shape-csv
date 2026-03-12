@@ -12,29 +12,45 @@
 
 Repository: github.com/shapestone/shape-csv
 
-A CSV parser for the [Shape Parser™](https://github.com/shapestone/shape) ecosystem.
+**A high-performance CSV parser for Go with struct marshaling, schema validation, and streaming support.**
 
-A high-performance CSV parser for Go that generates Shape AST representations. Part of the Shape ecosystem for unified data format handling.
+shape-csv reads and writes CSV files safely and fast, with full RFC 4180 (the Comma-Separated Values standard) compliance. It generates Shape AST (Abstract Syntax Tree) representations and is part of the Shape ecosystem for unified data format handling — giving you consistent parsing behavior across CSV, JSON, and other formats through a shared infrastructure.
+
+## Who It's For
+
+- **Go developers** who need fast, reliable CSV reading and writing with a clean API
+- **Data engineers** processing large CSV datasets in Go pipelines
+- **Teams migrating from `encoding/csv`** (Go's standard library CSV package) who want a drop-in upgrade with better performance and richer features
+- **Projects needing schema validation** or dialect auto-detection for TSV, semicolon-separated, and other CSV variants
 
 ## Features
 
 - **RFC 4180 Compliant**: Full support for quoted fields, escaped quotes, and embedded newlines
-- **High Performance**: a bit faster than encoding/csv with fewer allocations
+- **High Performance**: Faster than `encoding/csv` with significantly fewer allocations
 - **Type-Safe Unmarshal/Marshal**: Convert CSV to/from Go structs with struct tags
 - **Custom Interfaces**: Implement `Marshaler`/`Unmarshaler` for complex types
 - **Streaming Support**: Memory-efficient parsing of large files with `Scanner`
-- **DOM API**: `Document` type for programmatic CSV manipulation
+- **DOM API (Document Object Model)**: `Document` type for programmatic CSV manipulation
 - **Dialect Detection**: Auto-detect delimiter and header presence with `Sniffer`
 - **Schema Validation**: Define and validate CSV structure with required fields, types, and constraints
 - **Type Converters**: Built-in converters for int, float, bool, date, time with type inference
 - **Error Recovery**: Skip/warn/error modes for malformed CSV with structured `ParseError`
 - **Size Limits**: `MaxFieldSize` and `MaxRecordSize` to prevent memory exhaustion
 - **Position Tracking**: `FieldPos()` and `InputOffset()` for precise error reporting
-- **Configurable Parsing**: encoding/csv compatible options plus `EscapeChar` for backslash escaping
+- **Configurable Parsing**: `encoding/csv` compatible options plus `EscapeChar` for backslash escaping
 - **Multi-Value Fields**: Split delimited values into slices with `csv:"field,split=|"`
 - **Nested Structs**: Flatten embedded structs with `csv:",recurse"`
 - **Transformation Hooks**: Pre/post processing hooks for custom field and row transformations
 - **Thread-Safe**: All functions are safe for concurrent use
+
+## Use Cases
+
+- Parsing CSV exports from databases, spreadsheets, and external APIs
+- Bulk importing structured data into Go applications
+- Validating CSV file structure before processing
+- Streaming multi-gigabyte CSV files without loading them into memory
+- Drop-in replacement for `encoding/csv` with better performance and additional features
+- Auto-detecting delimiters in unknown CSV dialects (TSV, semicolon-separated, etc.)
 
 ## Installation
 
@@ -128,7 +144,7 @@ if err := csv.Validate(csvData); err != nil {
 | `Unmarshal([]byte, interface{})` | CSV bytes to Go structs |
 | `Marshal(interface{})` | Go structs to CSV bytes |
 
-### DOM API
+### DOM API (Document Object Model)
 
 | Type/Function | Description |
 |---------------|-------------|
@@ -275,7 +291,7 @@ transformed := proc.TransformRow(record)
 
 ### Parser Options
 
-Configure parsing behavior (encoding/csv compatible):
+Configure parsing behavior (`encoding/csv` compatible):
 
 ```go
 opts := csv.DefaultReaderOptions()
@@ -375,17 +391,19 @@ Supported tag options:
 
 ## Performance
 
-shape-csv is faster than encoding/csv with significantly fewer allocations:
+shape-csv is faster than `encoding/csv` (Go's standard library CSV package) with significantly fewer allocations:
 
 - **2.5x faster** for small files, **1.1x faster** for large files
 - **5,000x fewer allocations** for large files (4 vs 20,039)
 - **21% less memory** usage
 
-Run `make bench-vs-stdlib` to see current benchmarks.
+The parser uses a DFA (Deterministic Finite Automaton) for tokenization and optional SIMD (Single Instruction Multiple Data) acceleration for hot paths on supported platforms.
+
+Run `make bench-vs-stdlib` to see current benchmarks on your machine.
 
 ## RFC 4180 Compliance
 
-This parser implements RFC 4180 with the following rules:
+This parser implements RFC 4180 (the Comma-Separated Values standard) with the following rules:
 
 - Fields separated by commas (`,`)
 - Records separated by CRLF (`\r\n`) or LF (`\n`)
@@ -410,14 +428,49 @@ go run examples/encoding_csv_api/main.go
 
 ## Development
 
+### Prerequisites
+
+- Go 1.22 or later
+- `golangci-lint` for linting (`go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`)
+
+### Make Targets
+
+| Target | Description |
+|--------|-------------|
+| `make test` | Run all tests with race detection |
+| `make lint` | Run golangci-lint |
+| `make build` | Build all packages |
+| `make coverage` | Generate HTML coverage report |
+| `make bench` | Run benchmarks with memory stats |
+| `make bench-report` | Run benchmarks and save results to file |
+| `make bench-compare` | Run 10x benchmarks for statistical analysis |
+| `make bench-profile` | CPU and memory profiling |
+| `make bench-vs-stdlib` | Compare shape-csv against `encoding/csv` |
+| `make bench-history` | List historical benchmark runs |
+| `make bench-compare-history` | Compare current vs historical benchmarks |
+| `make performance-report` | Generate performance report file |
+| `make grammar-test` | Run CSV grammar verification tests |
+| `make grammar-verify` | Verify grammar files exist |
+| `make clean` | Remove generated files |
+| `make all` | Run grammar-verify, test, lint, build, coverage |
+
 ```bash
-make test      # Run tests
+make test      # Run tests with race detection
 make lint      # Run linter
 make build     # Build packages
 make bench     # Run benchmarks
 make coverage  # Generate coverage report
 make all       # Run all checks
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to report bugs, submit pull requests, and run the development workflow.
+
+## Related Projects
+
+- [shape-core](https://github.com/shapestone/shape-core) — The core AST and tokenizer infrastructure that shape-csv builds on
+- [shape](https://github.com/shapestone/shape) — The Shape Parser™ ecosystem for unified data format parsing
 
 ## License
 
