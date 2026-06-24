@@ -10,12 +10,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           path: shape-csv
 
       - name: Checkout shape-core
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: shapestone/shape-core
           path: shape-core
@@ -73,12 +73,12 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           path: shape-csv
 
       - name: Checkout shape-core
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: shapestone/shape-core
           path: shape-core
