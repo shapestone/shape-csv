@@ -134,8 +134,9 @@ if err := csv.Validate(csvData); err != nil {
 |----------|-------------|
 | `Parse(string)` | Parse CSV string to AST |
 | `ParseReader(io.Reader)` | Parse CSV from any reader |
-| `Validate(string)` | Validate CSV without AST (fast) |
+| `Validate(string)` | Validate CSV without AST (fast); records must have equal field counts |
 | `ValidateReader(io.Reader)` | Validate CSV from reader |
+| `ParseLine(string)` | Parse one CSV record into `[]string` (error on malformed input) |
 
 ### Marshal/Unmarshal
 

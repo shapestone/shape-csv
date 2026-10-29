@@ -142,6 +142,11 @@ func (p *Parser) Parse() (ast.SchemaNode, error) {
 			continue
 		}
 
+		// Errors below are reported against the line the record starts on.
+		if line := p.position().Line; line > 0 {
+			p.currentLine = line
+		}
+
 		record, err := p.parseRecord()
 		if err != nil {
 			// Handle error based on OnBadLine mode
