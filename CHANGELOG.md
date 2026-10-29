@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-10-29
+
 ### Changed (breaking for v0.9.x callers of `Validate`)
 - **`csv.Validate` and `csv.ValidateReader` now reject ragged rows.** Every record must have as many fields as the first one, so `a,b\n1,2,3` and `a,b\n1` are invalid. v0.9.x accepted them, so any code that validated ragged CSV and treated it as valid will start getting errors. This restores shape v0.4.0 and `encoding/csv` behaviour. `ValidateWithOptions` with default options still allows ragged records. Blank lines are skipped and quoted fields may span lines.
 - Line breaks are `\n`, `\r\n` and a lone `\r`. A lone `\r` ends a record and counts as one line in error positions. `encoding/csv` instead keeps a lone `\r` inside the field, so the two disagree on such input.
