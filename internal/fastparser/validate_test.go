@@ -71,6 +71,7 @@ func TestValidate_FieldCountLine(t *testing.T) {
 		{"blank lines are counted", "a,b\n\n\n1", 4, 1, 2},
 		{"after multi-line quoted field", "a,b\n\"x\ny\",2\n1,2,3", 4, 3, 2},
 		{"CRLF", "a,b\r\n1,2\r\n1\r\n", 3, 1, 2},
+		{"lone CR is a line break", "a,b\r1,2\r1", 3, 1, 2},
 		{"empty trailing field counts", "a,b\n1,2\n3,", 0, 0, 0},
 	}
 	for _, tc := range tests {

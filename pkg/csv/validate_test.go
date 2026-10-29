@@ -155,3 +155,25 @@ func TestParseLine_MatchesEncodingCSV(t *testing.T) {
 		}
 	}
 }
+
+func TestValidate_QuoteErrorIsParseError(t *testing.T) {
+	tests := []struct {
+		in        string
+		line, col int
+	}{
+		{"a,b\n1,\"2", 2, 4},
+		{"a,\"b\"c", 1, 6},
+		{"a,b\"c", 1, 4},
+	}
+	for _, tc := range tests {
+		err := Validate(tc.in)
+		var pe *ParseError
+		if !errors.As(err, &pe) || !errors.Is(err, ErrQuote) {
+			t.Errorf("Validate(%q) = %v, want *ParseError wrapping ErrQuote", tc.in, err)
+			continue
+		}
+		if pe.Line != tc.line || pe.Column != tc.col {
+			t.Errorf("Validate(%q): line %d col %d, want line %d col %d (%v)", tc.in, pe.Line, pe.Column, tc.line, tc.col, err)
+		}
+	}
+}

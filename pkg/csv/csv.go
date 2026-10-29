@@ -158,7 +158,10 @@ func Format() string {
 // Every record must have the same number of fields as the first one, as in
 // encoding/csv and shape v0.4.0: "a,b\n1,2,3" and "a,b\n1" are invalid. The
 // error is a *ParseError wrapping ErrFieldCount, with the line on which the
-// offending record starts. Blank lines are skipped. Use ValidateWithOptions
+// offending record starts. Malformed quoting is a *ParseError wrapping
+// ErrQuote, with the line and column of the problem. Line breaks are \n,
+// \r\n and a lone \r (unlike encoding/csv, which keeps a lone \r inside the
+// field); each counts as one line for error positions. Blank lines are skipped. Use ValidateWithOptions
 // to allow ragged records.
 func Validate(input string) error {
 	return validateBytes([]byte(input))
@@ -168,6 +171,15 @@ func Validate(input string) error {
 // into a *ParseError that wraps ErrFieldCount.
 func validateBytes(data []byte) error {
 	err := fastparser.Validate(data)
+	var se *fastparser.SyntaxError
+	if errors.As(err, &se) {
+		return &ParseError{
+			StartLine: se.Line,
+			Line:      se.Line,
+			Column:    se.Column,
+			Err:       fmt.Errorf("%w: %v", ErrQuote, se.Err),
+		}
+	}
 	var fc *fastparser.FieldCountError
 	if errors.As(err, &fc) {
 		return &ParseError{
