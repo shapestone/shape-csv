@@ -10,6 +10,7 @@
 package fastparser
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 )
@@ -37,6 +38,140 @@ func Parse(data []byte) ([][]string, error) {
 	}
 
 	return p.parse()
+}
+
+// FieldCountError reports a record whose field count differs from the first
+// record's. Line is the 1-indexed line on which the record starts.
+type FieldCountError struct {
+	Line int
+	Got  int
+	Want int
+}
+
+func (e *FieldCountError) Error() string {
+	return fmt.Sprintf("record on line %d: wrong number of fields (got %d, expected %d)", e.Line, e.Got, e.Want)
+}
+
+// SyntaxError reports malformed quoting found by Validate. Line and Column are
+// 1-indexed and point at the offending byte (for an unclosed quote, just after
+// the opening quote).
+type SyntaxError struct {
+	Line, Column int
+	Err          error
+}
+
+func (e *SyntaxError) Error() string {
+	return fmt.Sprintf("line %d, column %d: %v", e.Line, e.Column, e.Err)
+}
+
+func (e *SyntaxError) Unwrap() error { return e.Err }
+
+func newSyntaxError(data []byte, off int, err error) *SyntaxError {
+	line := lineAt(data, off)
+	col := 1
+	for i := off; i > 0 && data[i-1] != '\n' && data[i-1] != '\r'; i-- {
+		col++
+	}
+	return &SyntaxError{Line: line, Column: col, Err: err}
+}
+
+// Validate checks data as RFC 4180 CSV without keeping the records. It applies
+// the same quoting rules as Parse and additionally requires every record to
+// have as many fields as the first one (like encoding/csv with
+// FieldsPerRecord = 0). A mismatch is reported as a *FieldCountError.
+func Validate(data []byte) error {
+	p := &parser{data: data, length: len(data)}
+	want := -1
+
+	for p.pos < p.length {
+		if p.isNewline() {
+			p.skipNewline()
+			continue
+		}
+
+		start := p.pos
+		n := 0
+		for {
+			if _, err := p.parseField(); err != nil {
+				return newSyntaxError(data, p.pos, err)
+			}
+			n++
+
+			if p.pos >= p.length {
+				break
+			}
+			c := p.data[p.pos]
+			if c == ',' {
+				p.pos++
+				continue
+			}
+			if c == '\r' || c == '\n' {
+				p.skipNewline()
+				break
+			}
+			return newSyntaxError(data, p.pos, fmt.Errorf("unexpected character '%c' after closing quote at position %d", c, p.pos))
+		}
+
+		if want < 0 {
+			want = n
+		} else if n != want {
+			return &FieldCountError{Line: lineAt(data, start), Got: n, Want: want}
+		}
+	}
+	return nil
+}
+
+// ParseLine parses exactly one CSV record from line. A single trailing line
+// terminator is allowed; quoted fields may contain line breaks. An empty line
+// yields one empty field.
+func ParseLine(line string) ([]string, error) {
+	data := []byte(line)
+	switch {
+	case bytes.HasSuffix(data, []byte("\r\n")):
+		data = data[:len(data)-2]
+	case bytes.HasSuffix(data, []byte("\n")), bytes.HasSuffix(data, []byte("\r")):
+		data = data[:len(data)-1]
+	}
+
+	p := &parser{data: data, length: len(data)}
+	fields := make([]string, 0, 8)
+	for {
+		field, err := p.parseField()
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, field)
+
+		if p.pos >= p.length {
+			return fields, nil
+		}
+		c := p.data[p.pos]
+		if c == ',' {
+			p.pos++
+			continue
+		}
+		if c == '\r' || c == '\n' {
+			return nil, errors.New("input contains more than one record")
+		}
+		return nil, fmt.Errorf("unexpected character '%c' at position %d", c, p.pos)
+	}
+}
+
+// lineAt returns the 1-indexed line number of byte offset off in data.
+// "\r\n", a lone "\r" and a lone "\n" each count as one line break.
+func lineAt(data []byte, off int) int {
+	line := 1
+	for i := 0; i < off && i < len(data); i++ {
+		switch data[i] {
+		case '\n':
+			line++
+		case '\r':
+			if i+1 >= len(data) || data[i+1] != '\n' {
+				line++
+			}
+		}
+	}
+	return line
 }
 
 // parser implements a high-performance CSV parser.

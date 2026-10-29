@@ -53,6 +53,8 @@
 package csv
 
 import (
+	"errors"
+	"fmt"
 	"io"
 
 	"github.com/shapestone/shape-core/pkg/ast"
@@ -152,10 +154,58 @@ func Format() string {
 //   - Empty fields: a,,c
 //   - Escaped quotes: "field with ""quotes"""
 //   - Newlines in quoted fields: "field\nwith\nnewlines"
+//
+// Every record must have the same number of fields as the first one, as in
+// encoding/csv and shape v0.4.0: "a,b\n1,2,3" and "a,b\n1" are invalid. The
+// error is a *ParseError wrapping ErrFieldCount, with the line on which the
+// offending record starts. Malformed quoting is a *ParseError wrapping
+// ErrQuote, with the line and column of the problem. Line breaks are \n,
+// \r\n and a lone \r (unlike encoding/csv, which keeps a lone \r inside the
+// field); each counts as one line for error positions. Blank lines are skipped. Use ValidateWithOptions
+// to allow ragged records.
 func Validate(input string) error {
-	// Fast path: Just parse and discard (4-5x faster than AST construction)
-	_, err := fastparser.Parse([]byte(input))
+	return validateBytes([]byte(input))
+}
+
+// validateBytes runs the fast validator and converts a field-count failure
+// into a *ParseError that wraps ErrFieldCount.
+func validateBytes(data []byte) error {
+	err := fastparser.Validate(data)
+	var se *fastparser.SyntaxError
+	if errors.As(err, &se) {
+		return &ParseError{
+			StartLine: se.Line,
+			Line:      se.Line,
+			Column:    se.Column,
+			Err:       fmt.Errorf("%w: %v", ErrQuote, se.Err),
+		}
+	}
+	var fc *fastparser.FieldCountError
+	if errors.As(err, &fc) {
+		return &ParseError{
+			StartLine: fc.Line,
+			Line:      fc.Line,
+			Column:    1,
+			Err:       fmt.Errorf("%w (got %d, expected %d)", ErrFieldCount, fc.Got, fc.Want),
+		}
+	}
 	return err
+}
+
+// ParseLine parses a single CSV record (RFC 4180) into its fields.
+//
+// It is the counterpart of ParseLine in shape v0.4.0, with an added error for
+// malformed input: an unclosed quote, a quote inside an unquoted field,
+// characters after a closing quote, or more than one record. Quoted fields
+// may contain commas, line breaks and doubled quotes; one trailing line
+// terminator is ignored. An empty line yields a single empty field.
+//
+// Example:
+//
+//	fields, err := csv.ParseLine(`"Smith, John",30,NYC`)
+//	// fields == []string{"Smith, John", "30", "NYC"}
+func ParseLine(line string) ([]string, error) {
+	return fastparser.ParseLine(line)
 }
 
 // ValidateReader checks if the input from an io.Reader is valid CSV.
@@ -176,6 +226,7 @@ func Validate(input string) error {
 //	}
 //	// Valid CSV - err is nil
 //
+// It applies the same rules as Validate, including the field-count check.
 // For large streams, consider using ParseReader directly and handling errors.
 func ValidateReader(reader io.Reader) error {
 	// Fast path: Read all data and parse without AST
@@ -184,6 +235,5 @@ func ValidateReader(reader io.Reader) error {
 		return err
 	}
 
-	_, err = fastparser.Parse(data)
-	return err
+	return validateBytes(data)
 }
